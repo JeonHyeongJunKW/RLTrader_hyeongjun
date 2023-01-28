@@ -213,6 +213,7 @@ class CNN(Network):
         output = Dropout(0.1)(output)
         output = Flatten()(output)
         return Model(inp,output)
+
     def train_on_batch(self,x,y):
         x = np.array(x).reshape((-1,self.num_steps,self.input_dim,1))#배치단위로 바꿈, 1은 원래 채널 넣는부분
         return super().train_on_batch(x,y)
