@@ -74,7 +74,7 @@ class Network:
             if net=='dnn':
                 return DNN.get_network_head(Input((input_dim,))) #static이라서 가능
             elif net =='lstm':
-                return LSTMnetwork.get_network_head(Input((num_steps, input_dim)))
+                return LSTMNetwork.get_network_head(Input((num_steps, input_dim)))
             elif net =='cnn':
                 return CNN.get_network_head(
                     Input((1,num_steps,input_dim))

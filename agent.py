@@ -145,12 +145,12 @@ class Agent:
 
             invest_amount = curr_price*(1+self.TRAIDING_CHARGE)*trading_unit
             if invest_amount >0:
-                self.balance -=invest_amount #보유 현금 갱신
+                self.balance -= invest_amount #보유 현금 갱신
                 self.num_stocks += trading_unit # 보유 주식 수를 갱신
                 self.num_buy +=1 # 매수 횟수 증가
         elif action == Agent.ACTION_SELL:
             trading_unit = self.decide_trading_unit(confidence)
-            trading_unit = min(trading_unit,sum.num_stocks)
+            trading_unit = min(trading_unit,self.num_stocks)
             #매도
             invest_amount = curr_price*(1-(self.TRAIDING_TAX+self.TRAIDING_CHARGE))*trading_unit
 
