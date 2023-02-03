@@ -192,3 +192,59 @@ class ReinforcementLearner:
                 self.learning_cnt +=1#학습횟수 저장
                 self.memory_learning_idx.append(self.training_data_idx)
             self.batch_size = 0
+    def visualize(self,epoch_str, num_epoches, epsilon):
+        # 하나의 에포크가 완료되어 에포크 관련 정보를 가시화 하는 부분
+        # LSTM 신경망과 CNN 신경망을 사용하는 경우 에이전트의 행동등은 환경의 일봉 수보다 (num_step -1)만큼 부족하기 때문에, 처음에 의미없는 값을 첫부분에 채워준다.
+        self.memory_action = [Agent.ACTION_HOLD]*(self.num_steps-1)+self.memory_action
+        self.memory_num_stocks =[0]*(self.num_steps-1)+self.memory_num_stocks
+        if self.value_network is not None:
+            self.memory_value = [np.array([np.nan]*len(Agent.ACTIONS))]*(self.num_steps-1)+self.memory_value
+        if self.policy_network is not None:
+            self.memory_policy = [np.array([np.nan]*len(Agent.ACTIONS))]*(self.num_steps-1)+self.memory_policy
+        self.memory_pv = [self.agent.initial_balance]*(self.num_steps-1)+self.memory_pv
+        self.visualizer.plot(epoch_str=epoch_str,num_epochs=num_epoches,
+                             epsilon=epsilon,action_list=Agent.ACTIONS,
+                             actions=self.memory_action,
+                             num_stocks=self.memory_num_stocks,
+                             outvals_value=self.memory_value,
+                             outvals_policy=self.memory_policy,
+                             exps=self.memory_exp_idx,
+                             learing_idxes=self.memory_learning_idx,
+                             initial_balance=self.agent.initial_balance,
+                             pvs=self.memory_pv)
+        self.visualizer.save(os.path.join(self.epoch_summary_dir,
+                                          'epoch_summary_{}.png'.format(epoch_str)))
+
+    def run(self,num_epoches=100, balance=10000000,
+            discount_factor=0.9, start_epsilon=0.5, learning=True):
+        info = "[{code}] RL:{rl} Net:{net} LR:{lr} " \
+                "DF:{discount_factor} TU:[{min_trading_unit},]" \
+                "{max_trading_unit}] DRT:{delayed_reward_threshold}".format(
+                code=self.stock_code,rl=self.rl_method,net=self.net,
+                lr=self.lr, discount_factor=discount_factor,
+                min_trading_unit=self.agent.min_trading_unit,
+                max_trading_unit=self.agent.max_trading_unit,
+                delayed_reward_threshold=self.agent.delayed_reward_threshold)
+        with self.lock:
+            logging.info(info)
+
+        time_start = time.time()
+
+        # 가시화 준비
+        # 차트 데이터는 변하지 않으므로 미리 가시화
+        self.visualizer.prepare(self.environment.chart_data, info)
+
+        # 가시화 결과 저장할 폴더 준비
+        self.epoch_summary_dir = os.path.join(self.output_path, 'epoch_summary_{}'.format(self.stock_code))
+        if not os.path.isdir(self.epoch_summary_dir):
+            os.makedirs(self.epoch_summary_dir)
+        else :
+            for f in os.listdir(self.epoch_summary_dir):
+                os.remove(os.path.join(self.epoch_summary_dir,f))
+
+        # 에이전트 초기 자본금 설정
+        self.agent.set_balance(balance)
+
+        # 학습에 대한 정보 초기화
+        max_portfolio_value = 0 # 수행한 에포크 중에서 가장 높은 포트폴리오 가치
+        epoch_win_cnt = 0 # 수행한 에포크 중에서 수익이 발생한 에포크 수
