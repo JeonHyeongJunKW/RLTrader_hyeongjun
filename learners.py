@@ -248,3 +248,147 @@ class ReinforcementLearner:
         # 학습에 대한 정보 초기화
         max_portfolio_value = 0 # 수행한 에포크 중에서 가장 높은 포트폴리오 가치
         epoch_win_cnt = 0 # 수행한 에포크 중에서 수익이 발생한 에포크 수
+        #학습반복
+        for epoch in range(num_epoches):
+            time_start_epoch = time.time()
+
+            # step 샘플을 만들기 위한 큐
+            q_sample = collections.deque(maxlen=self.num_steps)
+
+            # 환경, 에이전트, 신경망, 가시화, 메모리 초기화
+            self.reset()
+
+            # 학습을 진행할 수록 탐험 비율 감소
+            if learning:
+                start_epsilon = start_epsilon*(1.-float(epoch)/(num_epoches-1))
+                self.agent.reset_exploration()
+            else :
+                epsilon = start_epsilon
+
+            while True:
+                # 샘플생성
+                next_sample = self.build_sample()
+                if next_sample is None:
+                    break
+
+                # num_steps 만큼 샘플을 저장
+                q_sample.append(next_sample)
+                if len(q_sample) <self.num_steps:#마지막까지 데이터를 다 읽은 것
+                    continue
+
+                pred_value = None
+                pred_policy = None
+
+                if self.value_network is not None:
+                    pred_value = self.value_network.predict(list(q_sample))
+                if self.policy_network is not None:
+                    pred_policy = self.policy_network.predict(list(q_sample))
+
+                # 신경망 또는 탐험에 의한 행동 결정
+                action, confidence, exploration = self.agent.decide_action(pred_value,pred_policy, epsilon)
+
+                # 결정된 행동을 수행하고 즉시 보상과 지연 보상 획득
+                immediate_reward, delayed_reward = self.agent.act(action, confidence)
+
+                # 행동 및 행동에 대한 결과를 기억
+                self.memory_sample.append(list(q_sample))
+                self.memory_action.append(action)
+                self.memory_reward.append(immediate_reward)
+                if self.value_network is not None:
+                    self.memory_value.append(pred_value)
+                if self.policy_network is not None:
+                    self.memory_policy.append(pred_policy)
+                self.memory_pv.append(self.agent.portfolio_value)
+                self.memory_num_stocks.append(self.agent.num_stocks)
+                if exploration:
+                    self.memory_exp_idx.append(self.training_data_idx)
+
+                # 반복에 대한 정보갱신
+                self.batch_size +=1
+                self.itr_cnt +=1
+                self.exploration_cnt +=1 if exploration else 0
+
+                # 지연 보상 발생된 경우 미니 배치 학습
+
+                if learning and (delayed_reward !=0):
+                    self.fit(delayed_reward, discount_factor)
+
+            # 에포크 관련정보 로그 기록
+            num_epoches_digit = len(str(num_epoches))
+            epoch_str = str(epoch +1).rjust(num_epoches_digit,'0')
+            time_end_epoch = time.time()
+            elapsed_time_epoch = time_end_epoch - time_start_epoch
+            if self.learning_cnt >0:
+                self.loss /=self.learning_cnt
+                logging.info("[{}][Epoch {}/{}] Epsilon:{:4f} "
+                             "#Expl.:{}/{} #Buy:{} #Sell:{} #Hold:{}"
+                             "#Stocks:{} PV:{:,.0f} "
+                             "LC:{} Loss:{:.6f} ET:{:.4f}".format(
+                    self.stock_code, epoch_str, num_epoches, epsilon,
+                    self.exploration_cnt, self.itr_cnt,
+                    self.agent.num_buy, self.agent.num_sell,
+                    self.agent.num_hold, self.agent.num_stocks,
+                    self.agent.portfolio_value, self.learning_cnt,
+                    self.loss, elapsed_time_epoch))
+
+            self.visualize(epoch_str,num_epoches,epsilon)
+
+            max_portfolio_value = max(max_portfolio_value, self.agent.portfolio_value)
+            if self.agent.portfolio_value > self.agent.initial_balance:
+                epoch_win_cnt +=1
+
+        # 종료 시간
+        time_end = time.time()
+        elapsed_time = time_end - time_start
+
+        # 학습 관련 정보 로그 기록
+        with self.lock:
+            logging.info("[{code}] Elapsed Time:{elapsed_time:.4f}"
+                         "Max PV:{max_pv:,.0f} #Win:{cnt_win}".format(
+                        code=self.stock_code,elapsed_time=elapsed_time,
+                        max_pv=max_portfolio_value, cnt_win=epoch_win_cnt))
+
+    def save_models(self):
+        if self.value_network is not None and \
+            self.value_network_path is not None:
+            self.value_network.save_model(self.value_network_path)
+        if self.policy_network is not None and \
+            self.policy_network_path is not None:
+            self.policy_network.save_model(self.policy_network_path)
+
+
+class DQNLearner(ReinforcementLearner):
+    def __init__(self,*args, value_network_path=None,**kwargs):
+        super().__init__(*args,**kwargs)
+        self.value_network_path = value_network_path
+        self.init_value_network()
+
+    def get_batch(self,batch_size,delayed_reward, discount_factor):
+        memory = zip(
+            reversed(self.memory_sample[-batch_size:]),
+            reversed(self.memory_action[-batch_size:]),
+            reversed(self.memory_value[-batch_size:]), #Q(s,a) 상태 행동 가치 함수를
+            reversed(self.memory_reward[-batch_size:]),
+        )
+        x = np.zeros((batch_size, self.num_steps, self.num_features))
+        y_value = np.zeros((batch_size, self.agent.NUM_ACTIONS))
+        value_max_next = 0
+        reward_next = self.memory_reward[-1]
+        #손익률은 초기자본금 대비 증감률이다.(%가 아니다.)
+        #delayed_reward는 배치데이터에서 마지막 손익률
+        #reward는 행동을 수행한 시점에서의 손익률
+        #목적 : x와 y가 같아져라!(가치를 잘 예측해라)
+        for i, (sample, action, value, reward) in enumerate(memory):
+            #reward : 행동을 수행한 시점에서의 손익률.
+            #reward_next : 다음 행동에서의 손익률
+            #delayed_reward : 맨마지막에 받은 손익률
+            x[i] = sample#실제 가치
+            y_value[i] = value# 모델에 의해서 반환된 상태 행동 가치 함수, 행동하지않은 값은 그대로 간다.
+
+            # r은 정해진게 아니다. 그냥 내가 마음대로 행동에 대한 즉각보상을 정할 수 있다. 그냥 reward_next - reward로 해도된다.(즉 오르면 보상을 더준다.)
+            # 처음꺼는 r은 0이라서 마지막꺼에 영향을 주지는 않는다.
+            r = (delayed_reward + reward_next - reward*2)*100# R^a_s :
+            y_value[i, action] = r + discount_factor*value_max_next# 다음 상태(s')에서의 최대 Q(s',a)값을 사용하는부분
+            value_max_next = value.max()
+            reward_next =reward
+        return x, y_value,None #샘플 배열, 가치 신경망 학습 레이블 배열, 정책 신경망 학습 레이블 배열을 반환한다.
