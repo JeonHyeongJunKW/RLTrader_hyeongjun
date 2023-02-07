@@ -530,12 +530,12 @@ class A3CLearner(ReinforcementLearner):
                                 **kwargs)
             self.learners.append(learner)
 
-    def run(self,num_epochs=100, balance=10000000,
+    def run(self,num_epoches=100, balance=10000000,
             discount_factor=0.9, start_epsilon=0.9, learning=True):
         threads =[]
         for learner in self.learners:
             threads.append(threading.Thread(target=learner.fit,daemon=True,
-                                            kwargs={'num_epochs':num_epochs, 'balance':balance,
+                                            kwargs={'num_epoches':num_epoches, 'balance':balance,
                                             'discount_factor':discount_factor,'start_epsilon':start_epsilon,'learning':learning}))
         for thread in threads:
             thread.start()
