@@ -392,3 +392,154 @@ class DQNLearner(ReinforcementLearner):
             value_max_next = value.max()
             reward_next =reward
         return x, y_value,None #샘플 배열, 가치 신경망 학습 레이블 배열, 정책 신경망 학습 레이블 배열을 반환한다.
+
+class PolicyGradientLearner(ReinforcementLearner):
+    #정책경사 신경망
+    # 분류 문제를 푸는 강화학습
+
+    def __init__(self, *args, policy_network_path=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.policy_network_path = policy_network_path
+        self.init_policy_network()
+
+    def get_batch(self,batch_size,delayed_reward, discount_factor):
+        memory = zip(
+            reversed(self.memory_sample[-batch_size:]),
+            reversed(self.memory_action[-batch_size:]),
+            reversed(self.memory_policy[-batch_size:]),  # Q(s,a) 상태 행동 가치 함수를
+            reversed(self.memory_reward[-batch_size:]),
+        )
+        x = np.zeros((batch_size, self.num_steps, self.num_features))
+        y_policy = np.full((batch_size, self.agent.NUM_ACTIONS), .5)#일관적으로 0.5로 채운다.
+        reward_next = self.memory_reward[-1]
+        for i,(sample, action, policy, reward) in enumerate(memory):
+            x[i] = sample
+            y_policy[i] = policy
+            r = (delayed_reward + reward_next - reward*2)*100
+            y_policy[i, action] = sigmoid(r)#정책에 대한 보상을 sigmoid를 사용하여 정책에 대한 확률 레이블로 정한다.
+            reward_next = reward
+        return x, None, y_policy
+
+class ActorCriticLearner(ReinforcementLearner):
+    # Actor critic 클래스
+    # 분류 문제를 푸는 강화학습
+
+    def __init__(self, *args, shared_network=None,
+                 value_network_path=None, policy_network_path=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if shared_network is None:
+            self.shared_network= Network.get_shared_network(net=self.net,num_steps=self.num_steps,
+                                                            input_dim=self.num_features)
+        else :
+            self.shared_network = shared_network
+        self.value_network_path = value_network_path
+        self.policy_network_path = policy_network_path
+        if self.value_network is None:
+            self.init_value_network(shared_network=shared_network)
+        if self.policy_network is None:
+            self.init_policy_network(shared_network=shared_network)
+
+    def get_batch(self,batch_size,delayed_reward, discount_factor):
+        memory = zip(
+            reversed(self.memory_sample[-batch_size:]),
+            reversed(self.memory_action[-batch_size:]),
+            reversed(self.memory_value[-batch_size:]),  # Q(s,a) 상태 행동 가치 함수를
+            reversed(self.memory_policy[-batch_size:]),  # Q(s,a) 상태 행동 가치 함수를
+            reversed(self.memory_reward[-batch_size:]),
+        )
+
+        x = np.zeros((batch_size, self.num_steps, self.num_features))
+        y_value = np.zeros((batch_size, self.agent.NUM_ACTIONS))
+        y_policy = np.full((batch_size, self.agent.NUM_ACTIONS), .5)  # 일관적으로 0.5로 채운다.
+        value_max_next = 0
+        reward_next = self.memory_reward[-1]
+        for i, (sample, action, value, policy, reward) in enumerate(memory):
+            x[i] = sample
+            y_policy[i] = policy
+            y_value[i] = value
+            r = (delayed_reward + reward_next - reward * 2) * 100
+            y_value[i,action] =r + discount_factor*value_max_next
+            y_policy[i, action] = sigmoid(value[action])  # 정책에 대한 보상을 sigmoid를 사용하여 정책에 대한 확률 레이블로 정한다.
+            value_max_next = value.max()
+            reward_next = reward
+        return x, y_value, y_policy
+
+class A2CLearner(ActorCriticLearner):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def get_batch(self,batch_size,delayed_reward, discount_factor):
+        memory = zip(
+            reversed(self.memory_sample[-batch_size:]),
+            reversed(self.memory_action[-batch_size:]),
+            reversed(self.memory_value[-batch_size:]),  # Q(s,a) 상태 행동 가치 함수를
+            reversed(self.memory_policy[-batch_size:]),  # Q(s,a) 상태 행동 가치 함수를
+            reversed(self.memory_reward[-batch_size:]),
+        )
+
+        x = np.zeros((batch_size, self.num_steps, self.num_features))
+        y_value = np.zeros((batch_size, self.agent.NUM_ACTIONS))
+        y_policy = np.full((batch_size, self.agent.NUM_ACTIONS), .5)  # 일관적으로 0.5로 채운다.
+        value_max_next = 0
+        reward_next = self.memory_reward[-1]
+        for i, (sample, action, value, policy, reward) in enumerate(memory):
+            x[i] = sample
+            r = (delayed_reward + reward_next - reward * 2) * 100
+            y_value[i,action] = r + discount_factor*value_max_next
+            advantage = value[action] - value.mean()
+            y_policy[i, action] = sigmoid(advantage)  # 정책에 대한 보상을 sigmoid를 사용하여 정책에 대한 확률 레이블로 정한다.
+            value_max_next = value.max()
+            reward_next = reward
+        return x, y_value, y_policy
+
+class A3CLearner(ReinforcementLearner):
+    def __init__(self, *args, list_stock_code=None,
+                 list_char_data=None, list_training_data=None,
+                 list_min_trading_unit=None, list_max_trading_unit=None,
+                 value_network_path=None, policy_network_path=None,
+                 **kwargs):
+        assert len(list_training_data) >0
+        super().__init__(*args,**kwargs)
+        self.num_features +=list_training_data[0].shape[1]
+
+        # 공유 신경망생성
+        self.shared_network = Network.get_shared_network(
+            net=self.net, num_steps=self.num_steps,
+            input_dim=self.num_features
+        )
+        self.value_network_path = value_network_path
+        self.policy_network_path = policy_network_path
+        if self.value_network is None:
+            self.init_value_network(shared_network=self.shared_network)
+        if self.policy_network is None:
+            self.init_policy_network(shared_network=self.shared_network)
+
+
+        # A2CLearner생성
+        self.learners = []
+        for (stock_code, chart_data, training_data, min_trading_unit, max_trading_unit) in zip(
+            list_stock_code, list_char_data, list_training_data, list_min_trading_unit,list_max_trading_unit
+        ):
+            learner= A2CLearner(*args,stock_code=stock_code, chart_data=chart_data,
+                                training_data=training_data,
+                                min_trading_unit=min_trading_unit,
+                                max_trading_unit=max_trading_unit,
+                                shared_network=self.shared_network,
+                                value_network=self.shared_network,
+                                policy_network=self.policy_network,
+                                **kwargs)
+            self.learners.append(learner)
+
+    def run(self,num_epochs=100, balance=10000000,
+            discount_factor=0.9, start_epsilon=0.9, learning=True):
+        threads =[]
+        for learner in self.learners:
+            threads.append(threading.Thread(target=learner.fit,daemon=True,
+                                            kwargs={'num_epochs':num_epochs, 'balance':balance,
+                                            'discount_factor':discount_factor,'start_epsilon':start_epsilon,'learning':learning}))
+        for thread in threads:
+            thread.start()
+            time.sleep(1)
+
+        for thread in threads: thread.join()
+
