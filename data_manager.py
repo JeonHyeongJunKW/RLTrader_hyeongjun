@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-COLUMNS_CHART_DATA = ['data','open','high','low','close','volume']
+COLUMNS_CHART_DATA = ['date','open','high','low','close','volume']
 
 #차트데이터
 COLUMNS_TRAINING_DATA_V1 = [

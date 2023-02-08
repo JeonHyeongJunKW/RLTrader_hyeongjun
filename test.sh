@@ -1,0 +1,1 @@
+python main.py --stock_code 005930 --rl_method pg --net dnn --learning --num_epoches 100 --lr 0.001 --start_epsilon 1 --discount_factor 0.9

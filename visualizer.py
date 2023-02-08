@@ -49,7 +49,7 @@ class Visualizer:
              outvals_value=[], outvals_policy=[],exps=None,
              learing_idxes=None,initial_balance=None,pvs=None):
         with lock:
-            x= np.arrange(len(actions))
+            x= np.arange(len(actions))
             actions = np.array(actions)# 에이전트의 행동 배열
             #가치 신경망의 출력 배열
             outvals_value = np.array(outvals_value)
@@ -98,14 +98,14 @@ class Visualizer:
 
             #차트 5 포트폴리오 가치
             self.axes[4].axhline(initial_balance, linestyle="-", color="gray")
-            self.axes[4].fill_between(x,pvs,pvs_base,where=pvs > pvs_base,factor='r', alpha=0.1)
-            self.axes[4].fill_between(x, pvs, pvs_base, where=pvs < pvs_base, factor='b', alpha=0.1)
+            self.axes[4].fill_between(x,pvs,pvs_base,where=pvs > pvs_base, facecolor='r', alpha=0.1)
+            self.axes[4].fill_between(x, pvs, pvs_base, where=pvs < pvs_base, facecolor='b', alpha=0.1)
             self.axes[4].plot(x,pvs,'-k')
             #학습 위치 표시
             for learing_idx in learing_idxes:
                 self.axes[4].axvline(learing_idx, color='y')
 
-            self.fig.subtitle('{} \nEpoch:{}\{} e={:.2f}'.format(self.title,epoch_str,num_epochs, epsilon))
+            self.fig.suptitle('{} \nEpoch:{}\{} e={:.2f}'.format(self.title,epoch_str,num_epochs, epsilon))
             self.fig.tight_layout()
             self.fig.subplots_adjust(top=0.85)
 

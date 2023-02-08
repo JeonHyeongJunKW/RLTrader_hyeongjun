@@ -260,7 +260,7 @@ class ReinforcementLearner:
 
             # 학습을 진행할 수록 탐험 비율 감소
             if learning:
-                start_epsilon = start_epsilon*(1.-float(epoch)/(num_epoches-1))
+                epsilon = start_epsilon*(1.-float(epoch)/(num_epoches-1))
                 self.agent.reset_exploration()
             else :
                 epsilon = start_epsilon

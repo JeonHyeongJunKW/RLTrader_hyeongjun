@@ -17,3 +17,6 @@ with <Lock 클래스객체>:<Thread-safe code>
 - 클래스 함수는 인스턴스를 만들지 않고 사용할 수 있는 함수이다. 내부 self 변수는 쓸수 없다.
 - mpl_finance 모듈은 다음 위치에서 다운로드 가능하다. [mp_finance](https://github.com/matplotlib/mpl_finance)
 - python setup.py install 명령어를 사용해주자.
+
+
+

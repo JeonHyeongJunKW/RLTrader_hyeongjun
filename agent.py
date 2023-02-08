@@ -107,6 +107,8 @@ class Agent:
         elif pred_value is not None:# 시그모이드를 사용했을 경우
             confidence = utils.sigmoid(pred[action])
 
+        return action, confidence, exploration
+
     def validate_action(self, action):
         # 신용매수나 공매수가 없음
         if action == Agent.ACTION_BUY:

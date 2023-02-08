@@ -16,9 +16,10 @@ if os.environ['KERAS_BACKEND'] == 'tensorflow':
     from tensorflow.keras.models import Model
     from tensorflow.keras.layers import Input, Dense, LSTM, Conv2D, BatchNormalization, Dropout, MaxPooling2D, Flatten
     from tensorflow.keras.optimizers import SGD
-    from tensorflow.keras.backend import set_session
+    # from tensorflow.keras.backend import set_session
+    from tensorflow.python.keras.backend import set_session # 수정한 부분
     import tensorflow as tf
-    graph = tf.get_default_graph()
+    graph = tf.compat.v1.get_default_graph()
     sess = tf.compat.v1.Session()
     print("tensorflow")
 elif os.environ['KERAS_BACKEND'] == 'plaidml.keras.backend':
@@ -59,6 +60,7 @@ class Network:
 
     def save_model(self,model_path):
         if model_path is not None and self.model is not None:
+            print("모델의 저장 경로 : ",model_path)
             self.model.save_weights(model_path,overwrite=True)#HDF5파일의 형태로 저장
 
     def load_model(self, model_path):
@@ -90,7 +92,7 @@ class DNN(Network):
             output = None
             if self.shared_network is None:
                 inp = Input((self.input_dim,))
-                output = self.get_shared_network(inp).output#공유신경망이 지정되지 않은경우 새롭게 생성한다.(기본 dnn)
+                output = self.get_network_head(inp).output#공유신경망이 지정되지 않은경우 새롭게 생성한다.(기본 dnn)
             else:
                 inp = self.shared_network.input
                 output = self.shared_network.output
@@ -134,7 +136,7 @@ class LSTMNetwork(Network):
             output = None
             if self.shared_network is None:
                 inp = Input((self.num_steps,self.input_dim))
-                output = self.get_shared_network(inp).output#공유신경망이 지정되지 않은경우 새롭게 생성한다.(기본 dnn)
+                output = self.get_network_head(inp).output#공유신경망이 지정되지 않은경우 새롭게 생성한다.(기본 dnn)
             else:
                 inp = self.shared_network.input
                 output = self.shared_network.output
@@ -180,7 +182,7 @@ class CNN(Network):
             output = None
             if self.shared_network is None:
                 inp = Input((self.num_steps,self.input_dim,1))
-                output = self.get_shared_network(inp).output#공유신경망이 지정되지 않은경우 새롭게 생성한다.(기본 dnn)
+                output = self.get_network_head(inp).output#공유신경망이 지정되지 않은경우 새롭게 생성한다.(기본 dnn)
             else:
                 inp = self.shared_network.input
                 output = self.shared_network.output
